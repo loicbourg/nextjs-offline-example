@@ -34,3 +34,30 @@ workbox.routing.registerRoute(
     cacheName: 'assets-cache',
   })
 );
+
+const urlSearchParams = new URL(location).searchParams;
+
+console.log("WAZA", urlSearchParams.get('offlineScripts'), urlSearchParams.get('buildId'));
+
+console.log('is ok');
+
+const buildId = urlSearchParams.get('buildId');
+if (buildId) {
+  workbox.precaching.precacheAndRoute([{ url: '/offline', revision: buildId }]);
+
+  const offlineScripts = urlSearchParams.get('offlineScripts');
+  if (offlineScripts) {
+    for (let offlineScript of offlineScripts.split(',')) {
+      workbox.precaching.precacheAndRoute([
+        { url: '/_next/' + offlineScript, revision: buildId },
+      ]);
+    }
+  }
+}
+
+workbox.routing.setCatchHandler(event => {
+  switch (event.request.destination) {
+    case 'document':
+      return workbox.precaching.matchPrecache('/offline');
+  }
+});

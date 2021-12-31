@@ -43,6 +43,7 @@ module.exports = {
             'workbox-core',
             'workbox-routing',
             'workbox-strategies',
+            'workbox-precaching',
           ]),
           {
             from: path.join(
