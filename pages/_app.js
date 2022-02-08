@@ -1,7 +1,8 @@
 import '../styles/globals.css'
 import {Workbox} from 'workbox-window';
-import {useEffect} from "react";
+import {useEffect, useLayoutEffect} from "react";
 import {useRouter} from "next/router";
+import {useNetworkStatus} from "../networkStatus";
 
 // dont try to load service worker if code is executed server side
 // load workbox only if browser can use service workers
@@ -18,9 +19,6 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
         '/offline'
         ].join(',')}`;
     }
-    console.log({
-      queryString
-    });
 
     workbox = new Workbox(`/service-worker.js?${queryString}`);
     workbox.register();
@@ -31,15 +29,21 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
 function MyApp({Component, pageProps}) {
   const router = useRouter();
 
-  useEffect(() => {
-    const script = document.getElementById('__NEXT_DATA__');
-    const baseFiles = document.getElementById('__NEXT_BASE_FILES__');
+  const networkStatus = useNetworkStatus(pageProps.isOfflinePage);
 
+  console.log({networkStatus, pageProps});
+
+  useLayoutEffect(() => {
     const sendPageProps = url => {
       // dont try to send message if Workbox is not initialized
       if (!workbox) {
         return;
       }
+
+      const script = document.getElementById('__NEXT_DATA__');
+      const baseFiles = document.getElementById('__NEXT_BASE_FILES__');
+
+      console.log("SEND POPULATE HTML CACHE", url, router.route, pageProps);
 
       // send message to worker with page informations
       workbox.messageSW({
@@ -60,7 +64,9 @@ function MyApp({Component, pageProps}) {
     return () => {
       router.events.off('routeChangeComplete', sendPageProps);
     };
-  }, [pageProps, router]);
+  }, [pageProps, router.route, router.query]);
+
+  console.log("render current route", router.route);
 
   return <Component {...pageProps} />
 }

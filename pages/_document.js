@@ -2,6 +2,8 @@ import Document, {Head, Html, Main, NextScript} from 'next/document'
 
 export default class CustomDocument extends Document {
   render() {
+    console.log('document render', this.props);
+
     return (
       <Html>
         <Head/>
