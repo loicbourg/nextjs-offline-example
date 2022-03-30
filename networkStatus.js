@@ -40,8 +40,6 @@ export function useSaveOfflinePage(pageProps) {
         return;
       }
 
-      console.log("SEND POPULATE HTML CACHE", url, router.route, pageProps);
-
       // send message to worker with page informations
       workbox.messageSW({
         type: 'POPULATE_HTML_CACHE',
@@ -77,8 +75,6 @@ export function useNetworkStatus(isOfflinePage = false) {
 
   // listen to "CACHED_RESPONSE_HAS_BEEN_USED" message from service worker
   useEffect(() => {
-    console.log('use effect network status');
-
     if (typeof window === 'undefined') {
       return;
     }
@@ -89,8 +85,6 @@ export function useNetworkStatus(isOfflinePage = false) {
 
 
     const messageListener = event => {
-      console.log("RECEIVED MESSAGE IN MAIN THREAD", {event});
-
       if (event.data.type !== 'CACHED_RESPONSE_HAS_BEEN_USED') {
         return;
       }

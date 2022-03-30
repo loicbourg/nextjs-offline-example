@@ -36,7 +36,7 @@ async function notifyCacheUsed(event) {
   const MAX_RETRY = 3;
   const messageId = Math.random()
     .toString(36)
-    .substr(2, 9);
+    .slice(2, 11);
 
   const ackMessageListener = async event => {
     if (event.data.type !== 'ACK_CACHED_RESPONSE_HAS_BEEN_USED') {
@@ -51,8 +51,6 @@ async function notifyCacheUsed(event) {
   };
 
   addEventListener('message', ackMessageListener);
-
-  console.log('SEND CACHED_RESPONSE_HAS_BEEN_USED');
 
   for (let i = 0; i < MAX_RETRY; i++) {
     client.postMessage({
@@ -120,13 +118,13 @@ workbox.routing.registerRoute(
       return false;
     }
 
-    if (data.url.pathname.substr(0, 14) !== '/_next/static/') {
+    if (data.url.pathname.slice(0, 14) !== '/_next/static/') {
       return false;
     }
 
     return (
       (data.request.destination === 'script' ||
-        data.url.pathname.substr(-10, 10) === '.module.js') || data.request.destination === 'style'
+        data.url.pathname.slice(-10) === '.module.js') || data.request.destination === 'style'
     );
   },
   new workbox.strategies.NetworkFirst({
@@ -151,8 +149,6 @@ if (buildId) {
 }
 
 workbox.routing.setCatchHandler(event => {
-  console.log('I AM THE CATCH HANDLER !');
-
   switch (event.request.destination) {
     case 'document':
       return workbox.precaching.matchPrecache('/offline');
@@ -227,7 +223,7 @@ async function populateHtmlCache(event) {
 
 addEventListener('message', async event => {
   if (event.data.type === 'POPULATE_HTML_CACHE') {
-    populateHtmlCache(event);
+    await populateHtmlCache(event);
     return;
   }
 })
