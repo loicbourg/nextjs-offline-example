@@ -52,6 +52,8 @@ async function notifyCacheUsed(event) {
 
   addEventListener('message', ackMessageListener);
 
+  console.log('SEND CACHED_RESPONSE_HAS_BEEN_USED');
+
   for (let i = 0; i < MAX_RETRY; i++) {
     client.postMessage({
       type: 'CACHED_RESPONSE_HAS_BEEN_USED',
@@ -149,6 +151,8 @@ if (buildId) {
 }
 
 workbox.routing.setCatchHandler(event => {
+  console.log('I AM THE CATCH HANDLER !');
+
   switch (event.request.destination) {
     case 'document':
       return workbox.precaching.matchPrecache('/offline');
