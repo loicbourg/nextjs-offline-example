@@ -3,6 +3,97 @@ importScripts('/workbox/workbox-sw.js');
 workbox.setConfig({debug: true});
 workbox.setConfig({modulePathPrefix: '/workbox'});
 
+function timeout(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+
+async function getClientFromClientId(clientId) {
+  const client = await self.clients.get(clientId);
+
+  if (client) {
+    return client;
+  }
+  // TODO: improve
+
+  // wait for window to be available
+  await timeout(1000);
+
+  return await self.clients.get(clientId);
+}
+
+async function notifyCacheUsed(event) {
+  const clientId =
+    event.resultingClientId !== '' ? event.resultingClientId : event.clientId;
+
+  const client = await getClientFromClientId(clientId);
+
+  if (!client) {
+    return;
+  }
+
+  let messageReceived = false;
+  const MAX_RETRY = 3;
+  const messageId = Math.random()
+    .toString(36)
+    .slice(2, 11);
+
+  const ackMessageListener = async event => {
+    if (event.data.type !== 'ACK_CACHED_RESPONSE_HAS_BEEN_USED') {
+      return;
+    }
+
+    if (event.data.messageId !== messageId) {
+      return;
+    }
+
+    messageReceived = true;
+  };
+
+  addEventListener('message', ackMessageListener);
+
+  for (let i = 0; i < MAX_RETRY; i++) {
+    client.postMessage({
+      type: 'CACHED_RESPONSE_HAS_BEEN_USED',
+      messageId,
+    });
+
+    await timeout(i * 1000 + 500);
+    if (messageReceived) {
+      break;
+    }
+  }
+
+  removeEventListener('message', ackMessageListener);
+}
+
+const broadcastCachedResponseUsedPlugins = {
+  cachedResponseWillBeUsed: async data => {
+    data.state.cacheUsed = true;
+
+    return data.cachedResponse;
+  },
+  handlerDidComplete: async data => {
+    if (!data.state.cacheUsed) {
+      return;
+    }
+
+    await notifyCacheUsed(data.event);
+  },
+};
+
+workbox.routing.registerRoute(
+  data => {
+    return data.url.pathname.startsWith('/_next/data/');
+  },
+  new workbox.strategies.NetworkFirst({
+    cacheName: 'page-data-cache',
+    plugins: [
+      broadcastCachedResponseUsedPlugins,
+    ]
+  })
+)
+
 workbox.routing.registerRoute(
   data => {
     return (
@@ -11,6 +102,9 @@ workbox.routing.registerRoute(
   },
   new workbox.strategies.NetworkFirst({
     cacheName: 'html-cache',
+    plugins: [
+      broadcastCachedResponseUsedPlugins,
+    ]
   })
 );
 
@@ -24,10 +118,13 @@ workbox.routing.registerRoute(
       return false;
     }
 
+    if (data.url.pathname.slice(0, 14) !== '/_next/static/') {
+      return false;
+    }
+
     return (
-      data.url.pathname.substr(0, 14) === '/_next/static/' &&
       (data.request.destination === 'script' ||
-        data.url.pathname.substr(-10, 10) === '.module.js') || data.request.destination === 'style'
+        data.url.pathname.slice(-10) === '.module.js') || data.request.destination === 'style'
     );
   },
   new workbox.strategies.NetworkFirst({
@@ -60,18 +157,12 @@ workbox.routing.setCatchHandler(event => {
 
 function renderFile(src) {
   if (src.endsWith('.css')) {
-    return '';
-    return `<link rel="stylesheet" href="${src}" />`;
+    return `<link rel="stylesheet" href="/_next/${src}" />`;
   }
 
-  let attributes = `src="/_next/${src}" crossorigin="anonymous" async=""`;
-  if (src.substr(-10, 10) === '.module.js') {
-    attributes = `${attributes} type="module"`;
-  } else {
-    attributes = `${attributes} nomodule=""`;
-  }
+  let attributes = `src="/_next/${src}" defer=""`;
 
-  return `<script ${attributes} ></script>`;
+  return `<script ${attributes}  ></script>`;
 }
 
 function renderFiles(scriptsSrc) {
@@ -80,7 +171,6 @@ function renderFiles(scriptsSrc) {
 
 async function populateHtmlCache(event) {
   const parsedNextData = JSON.parse(event.data.nextData);
-
 
   let pageData = {
     ...parsedNextData,
@@ -98,23 +188,24 @@ async function populateHtmlCache(event) {
 
   let {chunkFiles, baseFiles} = event.data;
 
-  baseFiles = JSON.parse(nextBaseScripts);
+  baseFiles = JSON.parse(baseFiles);
 
   const request = new Request(event.data.url);
   const response = new Response(
-    `<!DOCTYPE html> 
+    `<!DOCTYPE html>
         <html>
         <head>
-        <meta name="next-head-count" content="0"/>       
-                ${renderFiles(baseFiles.base)}
-        ${renderFiles(baseFiles.lowPriority)} 
+     <meta name="next-head-count" content="0">
+        ${renderFiles(baseFiles.base)}
+        ${renderFiles(chunkFiles)}
+        ${renderFiles(baseFiles.lowPriority)}
+
 </head>
         <body>
-        <div id="__next" ></div>
+        <div id="__next" data-reactroot=""></div>
         <script id="__NEXT_DATA__" type="application/json" crossorigin="anonymous">
             ${JSON.stringify(pageData)}
         </script>
-        ${renderFiles(chunkFiles)}
 
         </body>
         </html>`,
@@ -132,7 +223,7 @@ async function populateHtmlCache(event) {
 
 addEventListener('message', async event => {
   if (event.data.type === 'POPULATE_HTML_CACHE') {
-    populateHtmlCache(event);
+    await populateHtmlCache(event);
     return;
   }
 })
